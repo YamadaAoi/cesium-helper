@@ -2,7 +2,7 @@
  * @Author: zhouyinkui
  * @Date: 2023-12-07 13:42:36
  * @LastEditors: zhouyinkui
- * @LastEditTime: 2023-12-11 17:37:13
+ * @LastEditTime: 2023-12-11 17:54:51
  * @Description: 3DTiles工具
  */
 import {
@@ -76,6 +76,7 @@ export class MapTileImpl extends MapToolBase<
       this.handler.setInputAction(
         (event: ScreenSpaceEventHandler.PositionedEvent) => {
           const picked = viewer.scene.pick(event.position)
+          console.log(picked)
           // entity，primitive，3dtile上的点
           let position: Cartesian3 | undefined = viewer.scene.pickPosition(
             event.position
@@ -88,9 +89,7 @@ export class MapTileImpl extends MapToolBase<
             }
           }
           if (picked?.tileset && position) {
-            console.log(picked)
             // console.log(picked.getProperty('id'))
-            console.log(picked)
             const cartographic = Cartographic.fromCartesian(position)
             this.eventBus.fire('tile-pick', {
               point: [
@@ -98,7 +97,7 @@ export class MapTileImpl extends MapToolBase<
                 Math.toDegrees(cartographic.latitude),
                 cartographic.height
               ],
-              id: picked.id
+              id: picked.tileset.busiId
             })
           }
         },
@@ -255,7 +254,7 @@ export class MapTileImpl extends MapToolBase<
   locateTile(id: string) {
     const tile = this.getTileById(id)
     if (tile) {
-      this.mapView?.mapIns.zoomTo(tile).catch(err => {
+      this.mapView?.mapIns.flyTo(tile).catch(err => {
         console.error(err)
       })
     }

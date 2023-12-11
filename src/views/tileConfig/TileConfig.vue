@@ -2,7 +2,7 @@
  * @Author: zhouyinkui
  * @Date: 2023-12-08 14:48:44
  * @LastEditors: zhouyinkui
- * @LastEditTime: 2023-12-11 17:38:59
+ * @LastEditTime: 2023-12-11 17:47:15
  * @Description: 3DTiles配置
 -->
 <template>
@@ -290,6 +290,12 @@ function onLoaded() {
   impl.enable()
   impl.eventBus.on('position-change', e => {
     modelPositionChange(e.id, e.position)
+  })
+  impl.eventBus.on('tile-pick', e => {
+    if (e.id) {
+      impl?.locateTile(e.id)
+      curConfigId.value = e.id
+    }
   })
 
   tiles.value.forEach(tile => {
