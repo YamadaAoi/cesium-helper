@@ -1,0 +1,68 @@
+{
+  "name": "cesium-helper",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Cesium Helper",
+  "scripts": {
+    "start": "pnpm run dev",
+    "lint:code": "eslint \"src/**/*.{ts,tsx,js,jsx,vue}\"",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx,js,jsx,vue}\" --fix",
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "build-zip": "rimraf dist.zip && vite build && node scripts/zip.js",
+    "preview": "vite preview",
+    "unzip": "node scripts/unzip.js"
+  },
+  "dependencies": {
+    "@mo-yu/core": "^1.0.10",
+    "@mo-yu/vue": "^1.0.12",
+    "cesium": "^1.95.0",
+    "naive-ui": "^2.34.4",
+    "pinia": "^2.1.4",
+    "vue": "^3.3.4",
+    "vue-router": "^4.2.2"
+  },
+  "devDependencies": {
+    "@rollup/plugin-strip": "^3.0.2",
+    "@types/node": "^18.11.9",
+    "@types/postcss-preset-env": "^7.7.0",
+    "@types/postcss-pxtorem": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.11",
+    "@typescript-eslint/parser": "^5.59.11",
+    "@vitejs/plugin-vue": "^4.2.3",
+    "@vitejs/plugin-vue-jsx": "^3.0.1",
+    "adm-zip": "^0.5.10",
+    "eslint": "^8.43.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "eslint-plugin-promise": "^6.1.1",
+    "eslint-plugin-vue": "^9.15.0",
+    "lint-staged": "^13.2.2",
+    "postcss": "^8.4.24",
+    "postcss-preset-env": "^8.5.0",
+    "postcss-pxtorem": "^6.0.0",
+    "prettier": "^2.8.8",
+    "rimraf": "^5.0.1",
+    "sass": "^1.63.4",
+    "simple-git-hooks": "^2.8.1",
+    "ts-node": "^10.9.1",
+    "typescript": "5.0.4",
+    "vite": "^4.3.9",
+    "vite-plugin-checker": "^0.6.0",
+    "vite-plugin-compression": "^0.5.1",
+    "vite-plugin-static-copy": "^0.6.1",
+    "vue-eslint-parser": "^9.3.1",
+    "vue-tsc": "^1.8.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged --concurrent false"
+  },
+  "lint-staged": {
+    "*": [
+      "prettier --write --cache --ignore-unknown"
+    ],
+    "*.{js,jsx,ts,tsx,vue}": [
+      "eslint --fix"
+    ]
+  }
+}

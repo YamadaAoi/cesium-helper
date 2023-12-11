@@ -1,0 +1,18 @@
+# don't ever lint node_modules
+node_modules
+# don't lint build output (make sure it's set to your correct build folder name)
+dist
+
+.eslintrc.js
+
+vite.*.ts
+
+env.d.ts
+
+postcss.config.js
+
+tailwind.config.js
+
+public/**
+
+scripts/**
