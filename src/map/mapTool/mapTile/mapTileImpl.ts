@@ -2,7 +2,7 @@
  * @Author: zhouyinkui
  * @Date: 2023-12-07 13:42:36
  * @LastEditors: zhouyinkui
- * @LastEditTime: 2023-12-11 17:54:51
+ * @LastEditTime: 2023-12-12 18:31:41
  * @Description: 3DTiles工具
  */
 import {
@@ -296,8 +296,14 @@ export class MapTileImpl extends MapToolBase<
           Transforms.eastNorthUpToFixedFrame,
           new Matrix4()
         )
-        ;(tile.root as any).customTransform = modelMatrix.clone()
         tile.root.transform = modelMatrix
+        this.mapView?.mapIns
+          .flyTo(tile, {
+            duration: 0
+          })
+          .catch(err => {
+            console.error(err)
+          })
       } else if (['heading', 'pitch', 'roll'].includes(key)) {
         const hpr = new HeadingPitchRoll(
           Math.toRadians(
@@ -323,14 +329,15 @@ export class MapTileImpl extends MapToolBase<
           Transforms.eastNorthUpToFixedFrame,
           new Matrix4()
         )
-        ;(tile.root as any).customTransform = modelMatrix.clone()
         tile.root.transform = modelMatrix
       } else if (key === 'scale') {
-        let modelMatrix = (tile.root as any).customTransform?.clone()
-        if (!modelMatrix) {
-          ;(tile.root as any).customTransform = tile.root.transform.clone()
-          modelMatrix = tile.root.transform.clone()
-        }
+        const modelMatrix = Transforms.headingPitchRollToFixedFrame(
+          data[0],
+          data[1],
+          Ellipsoid.WGS84,
+          Transforms.eastNorthUpToFixedFrame,
+          new Matrix4()
+        )
         const scale = Matrix4.fromUniformScale(
           params.scale !== undefined ? params.scale : 1
         )
@@ -377,7 +384,7 @@ export class MapTileImpl extends MapToolBase<
     // const boundingSphere = tile.boundingSphere
     // const cartographic = Cartographic.fromCartesian(boundingSphere.center)
     const cartographic = Cartographic.fromCartesian(cartesian)
-    const offset = Cartesian3.fromDegrees(
+    const position = Cartesian3.fromDegrees(
       params.lng !== undefined
         ? params.lng
         : Math.toDegrees(cartographic.longitude),
@@ -386,40 +393,34 @@ export class MapTileImpl extends MapToolBase<
         : Math.toDegrees(cartographic.latitude),
       params.height !== undefined ? params.height : cartographic.height
     )
-    const modelMatrix = Transforms.eastNorthUpToFixedFrame(offset)
-    // 缩放
+    const hpr = new HeadingPitchRoll(
+      Math.toRadians(
+        params.heading !== undefined
+          ? params.heading
+          : Math.toDegrees(headingPitchRoll.heading)
+      ),
+      Math.toRadians(
+        params.pitch !== undefined
+          ? params.pitch
+          : Math.toDegrees(headingPitchRoll.pitch)
+      ),
+      Math.toRadians(
+        params.roll !== undefined
+          ? params.roll
+          : Math.toDegrees(headingPitchRoll.roll)
+      )
+    )
+    const modelMatrix = Transforms.headingPitchRollToFixedFrame(
+      position,
+      hpr,
+      Ellipsoid.WGS84,
+      Transforms.eastNorthUpToFixedFrame,
+      new Matrix4()
+    )
     const scale = Matrix4.fromUniformScale(
       params.scale !== undefined ? params.scale : 1
     )
     Matrix4.multiply(modelMatrix, scale, modelMatrix)
-    // 旋转
-    const mx = Matrix3.fromRotationX(
-      Math.toRadians(
-        params.rx !== undefined
-          ? params.rx
-          : Math.toDegrees(headingPitchRoll.heading)
-      )
-    )
-    const rotationX = Matrix4.fromRotationTranslation(mx)
-    Matrix4.multiply(modelMatrix, rotationX, modelMatrix)
-    const my = Matrix3.fromRotationY(
-      Math.toRadians(
-        params.ry !== undefined
-          ? params.ry
-          : Math.toDegrees(headingPitchRoll.heading)
-      )
-    )
-    const rotationY = Matrix4.fromRotationTranslation(my)
-    Matrix4.multiply(modelMatrix, rotationY, modelMatrix)
-    const mz = Matrix3.fromRotationZ(
-      Math.toRadians(
-        params.rz !== undefined
-          ? params.rz
-          : Math.toDegrees(headingPitchRoll.heading)
-      )
-    )
-    const rotationZ = Matrix4.fromRotationTranslation(mz)
-    Matrix4.multiply(modelMatrix, rotationZ, modelMatrix)
     return modelMatrix
   }
 
@@ -429,6 +430,10 @@ export class MapTileImpl extends MapToolBase<
    * @returns
    */
   private getPosiHPR(mat: Matrix4): [Cartesian3, HeadingPitchRoll] {
+    // const scale = Matrix4.getScale(mat, new Cartesian3())
+    // const scaleX = Cartesian3.magnitude(scale)
+    // console.log(scaleX)
+    // Matrix4.getScale(mat, new Cartesian3())
     const cartesian = Matrix4.getTranslation(mat, new Cartesian3())
     const m1 = Transforms.eastNorthUpToFixedFrame(
       cartesian,

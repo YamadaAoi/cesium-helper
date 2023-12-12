@@ -2,7 +2,7 @@
  * @Author: zhouyinkui
  * @Date: 2022-07-20 09:14:38
  * @LastEditors: zhouyinkui
- * @LastEditTime: 2023-12-08 15:06:06
+ * @LastEditTime: 2023-12-12 14:17:04
  * @Description: 
  * Copyright (c) 2022 by piesat, All Rights Reserved. 
 -->
@@ -15,7 +15,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import 'cesiumcss'
-import { Cartesian3, Math, createWorldTerrain } from 'cesium'
+import { createWorldTerrain } from 'cesium'
 import { MapView } from '../../map/mapViewImpl'
 
 const props = withDefaults(
@@ -39,19 +39,6 @@ onMounted(() => {
     id: props.mapId
   })
   map.mapIns.terrainProvider = createWorldTerrain()
-  map.mapIns.camera.flyTo({
-    destination: Cartesian3.fromDegrees(
-      111.52424987944481,
-      30.694784907187238,
-      462.2104725889535
-    ),
-    orientation: {
-      heading: Math.toRadians(360),
-      pitch: Math.toRadians(-28.653299488271113),
-      roll: Math.toRadians(360)
-    },
-    duration: 0
-  })
   map.eventBus.once('ready', e => {
     mapReady.value = true
     emits('loaded', e.view?.id)

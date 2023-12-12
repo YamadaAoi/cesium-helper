@@ -36,9 +36,9 @@ export interface Cesium3DTilesOffset {
   lng?: number
   lat?: number
   height?: number
-  rx?: number
-  ry?: number
-  rz?: number
+  heading?: number
+  pitch?: number
+  roll?: number
   scale?: number
 }
 
