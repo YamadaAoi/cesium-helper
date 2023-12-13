@@ -2,7 +2,7 @@
  * @Author: zhouyinkui
  * @Date: 2023-12-07 13:42:36
  * @LastEditors: zhouyinkui
- * @LastEditTime: 2023-12-12 18:31:41
+ * @LastEditTime: 2023-12-13 16:42:31
  * @Description: 3DTiles工具
  */
 import {
@@ -21,7 +21,8 @@ import {
   Transforms,
   PrimitiveCollection,
   Cesium3DTileset,
-  Cesium3DTileStyle
+  Cesium3DTileStyle,
+  Cartesian2
 } from 'cesium'
 import {
   Position,
@@ -42,12 +43,14 @@ export interface TileInfo extends CameraParam {
  * 事件
  */
 export interface MapTileImplEvents {
+  'position-pick': {
+    position: Required<Position>
+  }
   'position-change': {
     id: string
     position: Required<Position>
   }
   'tile-pick': {
-    point?: [number, number, number?]
     id?: string
   }
 }
@@ -76,28 +79,22 @@ export class MapTileImpl extends MapToolBase<
       this.handler.setInputAction(
         (event: ScreenSpaceEventHandler.PositionedEvent) => {
           const picked = viewer.scene.pick(event.position)
-          console.log(picked)
-          // entity，primitive，3dtile上的点
-          let position: Cartesian3 | undefined = viewer.scene.pickPosition(
-            event.position
-          )
-          if (!position) {
-            const ray = viewer.camera.getPickRay(event.position)
-            if (ray) {
-              // 地形上的点
-              position = viewer.scene.globe.pick(ray, viewer.scene)
-            }
-          }
-          if (picked?.tileset && position) {
+          // console.log(picked)
+          if (picked?.tileset) {
             // console.log(picked.getProperty('id'))
-            const cartographic = Cartographic.fromCartesian(position)
             this.eventBus.fire('tile-pick', {
-              point: [
-                Math.toDegrees(cartographic.longitude),
-                Math.toDegrees(cartographic.latitude),
-                cartographic.height
-              ],
               id: picked.tileset.busiId
+            })
+          }
+          const position = this.getPosition(event.position)
+          if (position) {
+            const cartographic = Cartographic.fromCartesian(position)
+            this.eventBus.fire('position-pick', {
+              position: {
+                lng: Math.toDegrees(cartographic.longitude),
+                lat: Math.toDegrees(cartographic.latitude),
+                height: cartographic.height
+              }
             })
           }
         },
@@ -105,54 +102,42 @@ export class MapTileImpl extends MapToolBase<
       )
       // 左键调整横向位置
       this.handler.setInputAction(
-        (action: ScreenSpaceEventHandler.PositionedEvent) => {
-          const picked = viewer.scene.pick(action.position)
+        (event: ScreenSpaceEventHandler.PositionedEvent) => {
+          const picked = viewer.scene.pick(event.position)
           if (picked?.tileset?.root?.transform) {
             viewer.scene.screenSpaceCameraController.enableRotate = false
             picked.tileset.style = this.#style
             this.handler?.setInputAction(
               (action: ScreenSpaceEventHandler.MotionEvent) => {
                 // entity，primitive，3dtile上的点
-                let position: Cartesian3 | undefined =
-                  viewer.scene.pickPosition(action.endPosition)
-                if (!position) {
-                  const ray = viewer.camera.getPickRay(action.endPosition)
-                  if (ray) {
-                    // 地形上的点
-                    position = viewer.scene.globe.pick(ray, viewer.scene)
-                  }
-                }
+                const position = this.getPosition(action.endPosition)
                 if (position) {
-                  const nextCartographic =
+                  const data = this.getPosiHPRScale(
+                    picked.tileset.root.transform
+                  )
+                  const prev =
+                    viewer.scene.globe.ellipsoid.cartesianToCartographic(
+                      data[0]
+                    )
+                  const next =
                     viewer.scene.globe.ellipsoid.cartesianToCartographic(
                       position
                     )
-                  const [prevCartesian, headingPitchRoll] = this.getPosiHPR(
-                    picked.tileset.root.transform
-                  )
-                  const prevCartographic =
-                    viewer.scene.globe.ellipsoid.cartesianToCartographic(
-                      prevCartesian
-                    )
-                  nextCartographic.height = prevCartographic.height
-                  const cartesianWithNewHeight =
-                    viewer.scene.globe.ellipsoid.cartographicToCartesian(
-                      nextCartographic
-                    )
-                  const modelMatrix = Transforms.headingPitchRollToFixedFrame(
-                    cartesianWithNewHeight,
-                    headingPitchRoll,
-                    Ellipsoid.WGS84,
-                    Transforms.eastNorthUpToFixedFrame,
-                    new Matrix4()
+                  next.height = prev.height
+                  const translation =
+                    viewer.scene.globe.ellipsoid.cartographicToCartesian(next)
+                  const modelMatrix = this.createMatrix(
+                    translation,
+                    data[1],
+                    data[2]
                   )
                   picked.tileset.root.transform = modelMatrix
                   this.eventBus.fire('position-change', {
                     id: picked.tileset.busiId,
                     position: {
-                      lng: Math.toDegrees(nextCartographic.longitude),
-                      lat: Math.toDegrees(nextCartographic.latitude),
-                      height: nextCartographic.height
+                      lng: Math.toDegrees(next.longitude),
+                      lat: Math.toDegrees(next.latitude),
+                      height: next.height
                     }
                   })
                 }
@@ -171,8 +156,8 @@ export class MapTileImpl extends MapToolBase<
       )
       // 右键调整纵向高度
       this.handler.setInputAction(
-        (action: ScreenSpaceEventHandler.PositionedEvent) => {
-          const picked = viewer.scene.pick(action.position)
+        (event: ScreenSpaceEventHandler.PositionedEvent) => {
+          const picked = viewer.scene.pick(event.position)
           if (picked?.tileset?.root?.transform) {
             viewer.scene.screenSpaceCameraController.enableInputs = false
             picked.tileset.style = this.#style
@@ -180,47 +165,40 @@ export class MapTileImpl extends MapToolBase<
               (action: ScreenSpaceEventHandler.MotionEvent) => {
                 const ray = viewer.scene.camera.getPickRay(action.endPosition)
                 if (ray) {
-                  const [prevCartesian, headingPitchRoll] = this.getPosiHPR(
+                  const data = this.getPosiHPRScale(
                     picked.tileset.root.transform
                   )
-                  const prevCartographic =
-                    viewer.scene.globe.ellipsoid.cartesianToCartographic(
-                      prevCartesian
-                    )
                   const diff = Cartesian3.subtract(
                     viewer.scene.camera.position,
-                    prevCartesian,
+                    data[0],
                     new Cartesian3()
                   )
                   const planeNormal = Cartesian3.normalize(diff, diff)
-                  const plane = Plane.fromPointNormal(
-                    prevCartesian,
-                    planeNormal
-                  )
+                  const plane = Plane.fromPointNormal(data[0], planeNormal)
                   const nextCartesian = IntersectionTests.rayPlane(ray, plane)
-                  const nextCartographic =
+                  const next =
                     viewer.scene.globe.ellipsoid.cartesianToCartographic(
                       nextCartesian
                     )
-                  prevCartographic.height = nextCartographic.height
-                  const cartesianWithNewHeight =
-                    viewer.scene.globe.ellipsoid.cartographicToCartesian(
-                      prevCartographic
+                  const prev =
+                    viewer.scene.globe.ellipsoid.cartesianToCartographic(
+                      data[0]
                     )
-                  const modelMatrix = Transforms.headingPitchRollToFixedFrame(
-                    cartesianWithNewHeight,
-                    headingPitchRoll,
-                    Ellipsoid.WGS84,
-                    Transforms.eastNorthUpToFixedFrame,
-                    new Matrix4()
+                  prev.height = next.height
+                  const translation =
+                    viewer.scene.globe.ellipsoid.cartographicToCartesian(prev)
+                  const modelMatrix = this.createMatrix(
+                    translation,
+                    data[1],
+                    data[2]
                   )
                   picked.tileset.root.transform = modelMatrix
                   this.eventBus.fire('position-change', {
                     id: picked.tileset.busiId,
                     position: {
-                      lng: Math.toDegrees(prevCartographic.longitude),
-                      lat: Math.toDegrees(prevCartographic.latitude),
-                      height: prevCartographic.height
+                      lng: Math.toDegrees(prev.longitude),
+                      lat: Math.toDegrees(prev.latitude),
+                      height: prev.height
                     }
                   })
                 }
@@ -246,17 +224,48 @@ export class MapTileImpl extends MapToolBase<
     this.clear()
   }
 
+  removeAllTiles() {
+    this.#tiles.removeAll()
+  }
+
+  removeTile(primitive: any) {
+    if (primitive) {
+      this.#tiles.remove(primitive)
+    }
+  }
+
   clear() {
     this.eventBus.fire('tile-pick', {})
     this.removeAllTiles()
   }
 
+  /**
+   * 根据id获取tile
+   * @param id
+   * @returns
+   */
+  getTileById(id: string) {
+    const len = this.#tiles.length
+    let tile: Cesium3DTileset | undefined
+    for (let i = 0; i < len; i++) {
+      const p = this.#tiles.get(i)
+      if (p.busiId === id) {
+        tile = p
+      }
+    }
+    return tile
+  }
+
   locateTile(id: string) {
     const tile = this.getTileById(id)
     if (tile) {
-      this.mapView?.mapIns.flyTo(tile).catch(err => {
-        console.error(err)
-      })
+      this.mapView?.mapIns
+        .flyTo(tile, {
+          duration: 1
+        })
+        .catch(err => {
+          console.error(err)
+        })
     }
   }
 
@@ -277,71 +286,19 @@ export class MapTileImpl extends MapToolBase<
   updateTile(key: keyof TileInfo, params: TileInfo) {
     const tile = this.getTileById(params.id)
     if (tile) {
-      const data = this.getPosiHPR(tile.root.transform)
+      const data = this.getPosiHPRScale(tile.root.transform)
       if (['lng', 'lat', 'height'].includes(key)) {
-        const cartographic = Cartographic.fromCartesian(data[0])
-        const position = Cartesian3.fromDegrees(
-          params.lng !== undefined
-            ? params.lng
-            : Math.toDegrees(cartographic.longitude),
-          params.lat !== undefined
-            ? params.lat
-            : Math.toDegrees(cartographic.latitude),
-          params.height !== undefined ? params.height : cartographic.height
-        )
-        const modelMatrix = Transforms.headingPitchRollToFixedFrame(
-          position,
-          data[1],
-          Ellipsoid.WGS84,
-          Transforms.eastNorthUpToFixedFrame,
-          new Matrix4()
-        )
+        const translation = this.updateTranslation(data[0], params)
+        const modelMatrix = this.createMatrix(translation, data[1], data[2])
         tile.root.transform = modelMatrix
-        this.mapView?.mapIns
-          .flyTo(tile, {
-            duration: 0
-          })
-          .catch(err => {
-            console.error(err)
-          })
+        this.mapView?.mapIns.zoomTo(tile)
       } else if (['heading', 'pitch', 'roll'].includes(key)) {
-        const hpr = new HeadingPitchRoll(
-          Math.toRadians(
-            params.heading !== undefined
-              ? params.heading
-              : Math.toDegrees(data[1].heading)
-          ),
-          Math.toRadians(
-            params.pitch !== undefined
-              ? params.pitch
-              : Math.toDegrees(data[1].pitch)
-          ),
-          Math.toRadians(
-            params.roll !== undefined
-              ? params.roll
-              : Math.toDegrees(data[1].roll)
-          )
-        )
-        const modelMatrix = Transforms.headingPitchRollToFixedFrame(
-          data[0],
-          hpr,
-          Ellipsoid.WGS84,
-          Transforms.eastNorthUpToFixedFrame,
-          new Matrix4()
-        )
+        const hpr = this.updateHPR(data[1], params)
+        const modelMatrix = this.createMatrix(data[0], hpr, data[2])
         tile.root.transform = modelMatrix
       } else if (key === 'scale') {
-        const modelMatrix = Transforms.headingPitchRollToFixedFrame(
-          data[0],
-          data[1],
-          Ellipsoid.WGS84,
-          Transforms.eastNorthUpToFixedFrame,
-          new Matrix4()
-        )
-        const scale = Matrix4.fromUniformScale(
-          params.scale !== undefined ? params.scale : 1
-        )
-        Matrix4.multiply(modelMatrix, scale, modelMatrix)
+        const scale = this.createScale(params.scale)
+        const modelMatrix = this.createMatrix(data[0], data[1], scale)
         tile.root.transform = modelMatrix
       }
     }
@@ -365,7 +322,7 @@ export class MapTileImpl extends MapToolBase<
       const tileset = new Cesium3DTileset(option)
       const tile = await tileset.readyPromise
       if (params) {
-        const modelMatrix = this.getTransform(tile, params)
+        const modelMatrix = this.getTransform(tile.root.transform, params)
         tile.root.transform = modelMatrix
       }
       if (id) {
@@ -379,64 +336,68 @@ export class MapTileImpl extends MapToolBase<
     return primitive
   }
 
-  getTransform(tile: Cesium3DTileset, params: Cesium3DTilesOffset) {
-    const [cartesian, headingPitchRoll] = this.getPosiHPR(tile.root.transform)
-    // const boundingSphere = tile.boundingSphere
-    // const cartographic = Cartographic.fromCartesian(boundingSphere.center)
-    const cartographic = Cartographic.fromCartesian(cartesian)
-    const position = Cartesian3.fromDegrees(
-      params.lng !== undefined
-        ? params.lng
-        : Math.toDegrees(cartographic.longitude),
-      params.lat !== undefined
-        ? params.lat
-        : Math.toDegrees(cartographic.latitude),
+  getTransform(mat: Matrix4, params: Cesium3DTilesOffset) {
+    const data = this.getPosiHPRScale(mat)
+    const translation = this.updateTranslation(data[0], params)
+    const hpr = this.updateHPR(data[1], params)
+    const scale = this.createScale(params.scale)
+    const modelMatrix = this.createMatrix(translation, hpr, scale)
+    return modelMatrix
+  }
+
+  private updateTranslation(prev: Cartesian3, params: Cesium3DTilesOffset) {
+    const cartographic = Cartographic.fromCartesian(prev)
+    const translation = Cartesian3.fromDegrees(
+      this.getDegree(cartographic.longitude, params.lng),
+      this.getDegree(cartographic.latitude, params.lat),
       params.height !== undefined ? params.height : cartographic.height
     )
+    return translation
+  }
+
+  private updateHPR(prev: HeadingPitchRoll, params: Cesium3DTilesOffset) {
     const hpr = new HeadingPitchRoll(
-      Math.toRadians(
-        params.heading !== undefined
-          ? params.heading
-          : Math.toDegrees(headingPitchRoll.heading)
-      ),
-      Math.toRadians(
-        params.pitch !== undefined
-          ? params.pitch
-          : Math.toDegrees(headingPitchRoll.pitch)
-      ),
-      Math.toRadians(
-        params.roll !== undefined
-          ? params.roll
-          : Math.toDegrees(headingPitchRoll.roll)
-      )
+      Math.toRadians(this.getDegree(prev.heading, params.heading)),
+      Math.toRadians(this.getDegree(prev.pitch, params.pitch)),
+      Math.toRadians(this.getDegree(prev.roll, params.roll))
     )
+    return hpr
+  }
+
+  private createScale(scaleXYZ?: number) {
+    const x = scaleXYZ !== undefined ? scaleXYZ : 1
+    const scale = new Cartesian3(x, x, x)
+    return scale
+  }
+
+  private createMatrix(
+    translation: Cartesian3,
+    hpr: HeadingPitchRoll,
+    scale: Cartesian3
+  ) {
     const modelMatrix = Transforms.headingPitchRollToFixedFrame(
-      position,
+      translation,
       hpr,
       Ellipsoid.WGS84,
       Transforms.eastNorthUpToFixedFrame,
       new Matrix4()
     )
-    const scale = Matrix4.fromUniformScale(
-      params.scale !== undefined ? params.scale : 1
-    )
-    Matrix4.multiply(modelMatrix, scale, modelMatrix)
+    Matrix4.multiplyByScale(modelMatrix, scale, modelMatrix)
     return modelMatrix
   }
 
   /**
-   * 获取位置、旋转信息
+   * 获取位置、旋转、 缩放信息
    * @param picked -
    * @returns
    */
-  private getPosiHPR(mat: Matrix4): [Cartesian3, HeadingPitchRoll] {
-    // const scale = Matrix4.getScale(mat, new Cartesian3())
-    // const scaleX = Cartesian3.magnitude(scale)
-    // console.log(scaleX)
-    // Matrix4.getScale(mat, new Cartesian3())
-    const cartesian = Matrix4.getTranslation(mat, new Cartesian3())
+  private getPosiHPRScale(
+    mat: Matrix4
+  ): [Cartesian3, HeadingPitchRoll, Cartesian3] {
+    const scale = Matrix4.getScale(mat, new Cartesian3())
+    const translation = Matrix4.getTranslation(mat, new Cartesian3())
     const m1 = Transforms.eastNorthUpToFixedFrame(
-      cartesian,
+      translation,
       Ellipsoid.WGS84,
       new Matrix4()
     )
@@ -453,33 +414,31 @@ export class MapTileImpl extends MapToolBase<
       hpr.pitch,
       hpr.roll
     )
-    return [cartesian, headingPitchRoll]
+    return [translation, headingPitchRoll, scale]
   }
 
-  /**
-   * 根据id获取tile
-   * @param id
-   * @returns
-   */
-  getTileById(id: string) {
-    const len = this.#tiles.length
-    let tile: Cesium3DTileset | undefined
-    for (let i = 0; i < len; i++) {
-      const p = this.#tiles.get(i)
-      if (p.busiId === id) {
-        tile = p
+  private getDegree(prev: number, next?: number) {
+    return next !== undefined ? next : Math.toDegrees(prev)
+  }
+
+  private getPosition(endPosition: Cartesian2) {
+    const viewer = this.mapView?.mapIns
+    let position: Cartesian3 | undefined
+    if (viewer) {
+      // entity，primitive，3dtile上的点
+      try {
+        position = viewer.scene.pickPosition(endPosition)
+      } catch (error) {
+        console.error('不是entity，primitive，3dtile上的点', error)
+      }
+      if (!position) {
+        const ray = viewer.camera.getPickRay(endPosition)
+        if (ray) {
+          // 地形上的点
+          position = viewer.scene.globe.pick(ray, viewer.scene)
+        }
       }
     }
-    return tile
-  }
-
-  removeAllTiles() {
-    this.#tiles.removeAll()
-  }
-
-  removeTile(primitive: any) {
-    if (primitive) {
-      this.#tiles.remove(primitive)
-    }
+    return position
   }
 }

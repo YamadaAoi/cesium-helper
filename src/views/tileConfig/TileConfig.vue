@@ -2,7 +2,7 @@
  * @Author: zhouyinkui
  * @Date: 2023-12-08 14:48:44
  * @LastEditors: zhouyinkui
- * @LastEditTime: 2023-12-12 18:19:46
+ * @LastEditTime: 2023-12-13 17:01:37
  * @Description: 3DTiles配置
 -->
 <template>
@@ -11,7 +11,7 @@
     <template v-if="mapReady">
       <div class="edit-panel">
         <div class="edit-tools">
-          <div class="edit-tool" @click="togglePopup">添加</div>
+          <div class="edit-tool" @click="beforeAdd">添加</div>
           <label for="tile-import" class="edit-tool">
             <input id="tile-import" type="file" @change="importTiles" />
             导入
@@ -208,19 +208,19 @@
     :visiable="visiable"
     title="添加3DTiles"
     class="tiles-pop"
-    @close="togglePopup"
+    @close="cancel"
   >
     <div class="tiles-content">
       <div class="pop-row">
         <div class="pop-label need-field">3DTiles 名称：</div>
         <div class="pop-form">
-          <NInput v-model:value="name" size="small" />
+          <NInput v-model:value="addParam.name" size="small" />
         </div>
       </div>
       <div class="pop-row">
         <div class="pop-label need-field">3DTiles 路径：</div>
         <div class="pop-form">
-          <NInput v-model:value="url" size="small" />
+          <NInput v-model:value="addParam.url" size="small" />
         </div>
       </div>
       <div class="pop-btns">
@@ -232,7 +232,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { ShadowMode } from 'cesium'
 import { NInput, NInputNumber, NSlider, useMessage } from 'naive-ui'
 import { isNumber, guid } from '@mo-yu/core'
@@ -246,8 +246,11 @@ const { zoom } = useRem()
 const message = useMessage()
 const mapReady = ref(false)
 const visiable = ref(false)
-const url = ref('')
-const name = ref('')
+const readyForAdd = ref(false)
+const addParam: Omit<TileInfo, 'id'> = reactive({
+  name: '',
+  url: ''
+})
 const tiles = ref<TileInfo[]>([
   {
     id: '001',
@@ -255,21 +258,60 @@ const tiles = ref<TileInfo[]>([
     name: '倾斜摄影'
   },
   {
-    id: '002',
     url: 'http://119.3.213.144:8090/open-data/yiling/cqd/tileset.json',
-    name: '虫情',
+    id: 'e5ad2c56-e453-4813-a2d1-d7e3e89cf8f1',
+    name: '虫情灯1',
     lng: 111.52397822120717,
     lat: 30.700912408925433,
-    height: 137.38149397410075,
-    heading: 18,
-    pitch: 0,
-    roll: 0,
+    height: 137.38149397410075
+  },
+  {
+    url: 'http://119.3.213.144:8090/open-data/yiling/men/tileset.json',
+    id: '93d3675c-4e16-4049-874b-d5c93b94b598',
+    name: '大门1',
+    height: 145.9829600175461,
+    lng: 111.52115970661981,
+    lat: 30.700496642141747,
+    heading: 66
+  },
+  {
+    url: 'http://119.3.213.144:8090/open-data/yiling/scd/tileset.json',
+    id: '87dd6a9b-3223-4469-b5fe-1734c5872d85',
+    name: '杀虫灯1',
+    height: 143.2686815192955,
+    lat: 30.69991994126083,
+    lng: 111.52121913623765,
     scale: 2
   }
 ])
 const curConfigId = ref('')
 const hideTiles = ref<string[]>([])
 let impl: MapTileImpl | undefined
+
+function onLoaded() {
+  mapReady.value = true
+  impl = new MapTileImpl({ mapId: 'mainMapView' })
+  impl.enable()
+  impl.eventBus.on('position-change', e => {
+    modelPositionChange(e.id, e.position)
+  })
+  impl.eventBus.on('tile-pick', e => {
+    if (e.id) {
+      impl?.locateTile(e.id)
+      curConfigId.value = e.id
+    }
+  })
+  impl.eventBus.on('position-pick', e => {
+    if (e.position && readyForAdd.value) {
+      addParam.lng = e.position.lng
+      addParam.lat = e.position.lat
+      addParam.height = e.position.height
+      readyForAdd.value = false
+      visiable.value = true
+    }
+  })
+  loadTiles(tiles.value)
+}
 
 function importTiles(e: any) {
   if (e?.target?.files?.length) {
@@ -292,12 +334,15 @@ function importTiles(e: any) {
 }
 
 function confirm() {
-  if (url.value && name.value) {
+  if (addParam.url && addParam.name) {
     const t: TileInfo[] = [
       {
-        url: url.value,
         id: guid(),
-        name: name.value
+        url: addParam.url,
+        name: addParam.name,
+        lng: addParam.lng,
+        lat: addParam.lat,
+        height: addParam.height
       }
     ]
     loadTiles(t)
@@ -408,30 +453,18 @@ function loadTiles(arr: TileInfo[]) {
   }
 }
 
-function onLoaded() {
-  mapReady.value = true
-  impl = new MapTileImpl({ mapId: 'mainMapView' })
-  impl.enable()
-  impl.eventBus.on('position-change', e => {
-    modelPositionChange(e.id, e.position)
-  })
-  impl.eventBus.on('tile-pick', e => {
-    if (e.id) {
-      impl?.locateTile(e.id)
-      curConfigId.value = e.id
-    }
-  })
-  loadTiles(tiles.value)
-}
-
-function togglePopup() {
-  visiable.value = !visiable.value
+function beforeAdd() {
+  readyForAdd.value = true
+  message.warning('请在地图上选点')
 }
 
 function cancel() {
   visiable.value = false
-  url.value = ''
-  name.value = ''
+  addParam.name = ''
+  addParam.url = ''
+  addParam.lng = undefined
+  addParam.lat = undefined
+  addParam.height = undefined
 }
 </script>
 
@@ -456,6 +489,7 @@ function cancel() {
     .edit-tools {
       width: 100%;
       height: 42px;
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
       justify-content: flex-end;
@@ -470,11 +504,11 @@ function cancel() {
     }
     .edit-items {
       width: 100%;
-      height: calc(100% - 42px);
+      height: calc(100% - 48px);
       @include scrollHiddenBase();
       .edit-item {
         width: 100%;
-        // margin-bottom: 0.04rem;
+        margin-bottom: 6px;
         .edit-options {
           width: 100%;
           display: flex;
