@@ -2,7 +2,7 @@
  * @Author: zhouyinkui
  * @Date: 2023-12-08 14:48:44
  * @LastEditors: zhouyinkui
- * @LastEditTime: 2023-12-13 17:01:37
+ * @LastEditTime: 2023-12-13 17:19:32
  * @Description: 3DTiles配置
 -->
 <template>
@@ -251,39 +251,7 @@ const addParam: Omit<TileInfo, 'id'> = reactive({
   name: '',
   url: ''
 })
-const tiles = ref<TileInfo[]>([
-  {
-    id: '001',
-    url: 'http://119.3.213.144:8090/open-data/yiling/tiles/tileset.json',
-    name: '倾斜摄影'
-  },
-  {
-    url: 'http://119.3.213.144:8090/open-data/yiling/cqd/tileset.json',
-    id: 'e5ad2c56-e453-4813-a2d1-d7e3e89cf8f1',
-    name: '虫情灯1',
-    lng: 111.52397822120717,
-    lat: 30.700912408925433,
-    height: 137.38149397410075
-  },
-  {
-    url: 'http://119.3.213.144:8090/open-data/yiling/men/tileset.json',
-    id: '93d3675c-4e16-4049-874b-d5c93b94b598',
-    name: '大门1',
-    height: 145.9829600175461,
-    lng: 111.52115970661981,
-    lat: 30.700496642141747,
-    heading: 66
-  },
-  {
-    url: 'http://119.3.213.144:8090/open-data/yiling/scd/tileset.json',
-    id: '87dd6a9b-3223-4469-b5fe-1734c5872d85',
-    name: '杀虫灯1',
-    height: 143.2686815192955,
-    lat: 30.69991994126083,
-    lng: 111.52121913623765,
-    scale: 2
-  }
-])
+const tiles = ref<TileInfo[]>([])
 const curConfigId = ref('')
 const hideTiles = ref<string[]>([])
 let impl: MapTileImpl | undefined
